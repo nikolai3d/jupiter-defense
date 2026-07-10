@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Jupiter Shield — a tale of two solar systems</title>
+<style>
+/* Deliberately single-theme: a planetarium console is a dark room. */
+:root{
+  --void:#060a13; --glass:rgba(12,19,34,.94); --glass-soft:rgba(12,19,34,.78);
+  --ink:#e9eef7; --ink-dim:#93a0b8; --ink-faint:#5d6a83;
+  --line:rgba(147,160,184,.18);
+  --teal:#5bc8ae; --amber:#e5a55c; --gold:#ffd98f; --hot:#ff8b55;
+  --ok:#69d08c; --warn:#e8b84b; --bad:#e4685e;
+  --serif:"Palatino","Palatino Linotype","Book Antiqua",Georgia,serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+html,body{height:100%}
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--sans);overflow:hidden}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+#gl.dragging{cursor:grabbing}
+
+.panel{position:fixed;background:var(--glass);border:1px solid var(--line);border-radius:10px;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 8px 32px rgba(0,0,0,.45)}
+
+#leftcol{position:fixed;top:14px;left:14px;bottom:14px;width:288px;display:flex;flex-direction:column;gap:10px;pointer-events:none;z-index:2}
+#leftcol .panel{position:static;pointer-events:auto}
+#masthead{padding:14px 18px 12px;pointer-events:none!important}
+#masthead h1{font-family:var(--serif);font-weight:400;font-size:23px;letter-spacing:.01em;margin:0 0 4px;text-wrap:balance}
+#masthead h1 em{font-style:normal;color:var(--gold)}
+#masthead p{margin:0;font-size:12px;line-height:1.5;color:var(--ink-dim)}
+#masthead .plea{font-family:var(--serif);font-style:italic;color:var(--ink-faint);font-size:11.5px;margin-top:6px}
+
+#timebar{top:14px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:8px 14px;z-index:3}
+#playBtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:rgba(233,238,247,.06);
+  color:var(--ink);font-size:14px;cursor:pointer;display:grid;place-items:center}
+#playBtn:hover{background:rgba(233,238,247,.12)}
+#timebar input[type=range]{width:130px}
+#speedLabel{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);white-space:nowrap}
+#clock{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink-dim);min-width:104px}
+#speedVal{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;color:var(--ink-faint);min-width:70px}
+
+#controls{padding:14px 16px;overflow-y:auto;min-height:0;flex:0 1 auto}
+#readouts{right:14px;top:14px;width:300px;padding:14px 16px;max-height:calc(100vh - 28px);overflow-y:auto}
+
+.sect{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 10px}
+.sect:not(:first-child){margin-top:16px}
+.ctl{margin-bottom:12px}
+.ctl label{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-dim);margin-bottom:4px}
+.ctl label b{font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--gold);height:18px;margin:0}
+.hint{font-size:11px;line-height:1.5;color:var(--ink-faint);margin:6px 0 0}
+.presets{display:flex;gap:6px;flex-wrap:wrap}
+.presets button, .seg button, #redeal{font-size:11px;padding:5px 9px;border-radius:7px;border:1px solid var(--line);
+  background:rgba(233,238,247,.05);color:var(--ink-dim);cursor:pointer;font-family:var(--sans)}
+.presets button:hover,.seg button:hover,#redeal:hover{color:var(--ink);background:rgba(233,238,247,.12)}
+.presets button.on{background:rgba(255,217,143,.16);color:var(--gold);border-color:rgba(255,217,143,.4)}
+.seg{display:flex;gap:0;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{border:0;border-radius:0;flex:1}
+.seg button.on{background:rgba(255,217,143,.16);color:var(--gold)}
+.seg button:disabled{opacity:.35;cursor:not-allowed}
+#redeal{width:100%;margin-top:10px}
+button:focus-visible, input:focus-visible, summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+#stats{width:100%;border-collapse:collapse;font-size:11.5px}
+#stats th{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;text-align:right;padding:2px 0 6px}
+#stats th:first-child{text-align:left}
+#stats td{padding:4px 0;border-bottom:1px dotted rgba(147,160,184,.12);color:var(--ink-dim)}
+#stats td+td{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--ink);white-space:nowrap;padding-left:8px}
+#stats tr.hot td{color:var(--hot)}
+#stats tr.hot td:first-child{color:var(--hot);font-weight:600}
+#stats tr:last-child td{border-bottom:0}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px dotted rgba(147,160,184,.12)}
+.row:last-child{border-bottom:0}
+.row .k{font-size:11.5px;color:var(--ink-dim)}
+.row .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;text-align:right;white-space:nowrap}
+.pill{display:inline-block;font-size:10px;letter-spacing:.06em;padding:2px 8px;border-radius:99px;font-family:var(--sans);font-weight:600}
+.pill.ok{background:rgba(105,208,140,.16);color:var(--ok)}
+.pill.warn{background:rgba(232,184,75,.16);color:var(--warn)}
+.pill.bad{background:rgba(228,104,94,.18);color:var(--bad)}
+.pill.dim{background:rgba(147,160,184,.14);color:var(--ink-dim)}
+#overall{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:12.5px;line-height:1.45;border:1px solid var(--line);color:var(--ink-dim)}
+#overall.ok{border-color:rgba(105,208,140,.4);color:var(--ok)}
+#overall.warn{border-color:rgba(232,184,75,.4);color:var(--warn)}
+#overall.bad{border-color:rgba(228,104,94,.45);color:var(--bad)}
+.chartCap{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin:14px 0 4px}
+canvas.chart{width:100%;height:86px;display:block;border:1px solid var(--line);border-radius:6px;background:rgba(0,0,0,.25)}
+.legend{font-size:10.5px;color:var(--ink-faint);margin-top:3px}
+.legend .swA{color:var(--amber)} .legend .swB{color:#8fa7c9}
+
+#split{position:fixed;inset:0;pointer-events:none;z-index:1}
+#divider{position:absolute;top:0;bottom:0;left:50%;width:1px;background:linear-gradient(rgba(147,160,184,0),rgba(147,160,184,.35) 15%,rgba(147,160,184,.35) 85%,rgba(147,160,184,0))}
+.worldLbl{position:absolute;top:64px;width:50%;text-align:center;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-faint)}
+.worldLbl b{display:block;font-family:var(--mono);font-size:20px;font-weight:500;letter-spacing:.02em;margin-top:3px;color:var(--ink-dim)}
+.worldLbl span{font-size:10px;letter-spacing:.1em;color:var(--ink-faint)}
+#lblA{left:0;color:var(--amber)} #lblA b{color:var(--gold)}
+#lblB{right:0}
+
+#science{bottom:14px;left:50%;transform:translateX(-50%);max-width:470px;width:calc(100vw - 660px);min-width:300px;font-size:12.5px;z-index:3}
+#science summary{cursor:pointer;list-style:none;padding:10px 16px;font-family:var(--serif);font-size:14px;color:var(--gold)}
+#science summary::-webkit-details-marker{display:none}
+#science summary::before{content:"✶ "}
+#science .body{padding:2px 18px 14px;max-height:44vh;overflow-y:auto;line-height:1.6;color:var(--ink-dim);max-width:62ch}
+#science h3{font-family:var(--serif);font-weight:400;color:var(--ink);font-size:14px;margin:14px 0 6px}
+#science p{margin:0 0 9px}
+#science b{color:var(--ink);font-weight:600}
+#science .fn{font-size:11px;color:var(--ink-faint);border-top:1px solid var(--line);padding-top:8px;margin-top:10px}
+#science .fn+.fn{border-top:0;padding-top:0;margin-top:0}
+#science .fn b{color:var(--ink-dim)}
+
+#banner{top:66px;left:50%;transform:translateX(-50%);padding:9px 18px;font-size:13px;color:var(--bad);
+  border-color:rgba(228,104,94,.5);display:none;text-align:center;z-index:4}
+
+@media (max-width:900px){
+  #leftcol{width:220px;bottom:auto;max-height:52vh}
+  #masthead h1{font-size:16px} #masthead .plea{display:none} #masthead p{font-size:11px}
+  #controls{max-height:24vh}
+  #readouts{width:236px;max-height:44vh}
+  #science{max-width:calc(100vw - 28px);width:calc(100vw - 28px);bottom:64px}
+  #timebar{top:auto;bottom:8px} #clock{min-width:0}
+  .worldLbl{top:8px} .worldLbl b{font-size:15px}
+}
+@media (prefers-reduced-motion: reduce){ #playBtn{box-shadow:0 0 0 2px var(--gold)} }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="split">
+  <div id="divider"></div>
+  <div class="worldLbl" id="lblA">☄ With Jupiter<b id="hitCntA">0</b><span>impacts on Earth</span></div>
+  <div class="worldLbl" id="lblB">Without Jupiter<b id="hitCntB">0</b><span>impacts on Earth</span></div>
+</div>
+
+<div id="leftcol">
+<div id="masthead" class="panel">
+  <h1>The Jupiter Shield<br><em>a tale of two solar systems</em></h1>
+  <p>Two copies of the same young solar system, seeded with the <b>same</b> swarm of comets on Earth-threatening orbits. The left one keeps its giant planet; the right one never formed it. Watch which Earth takes more hits.</p>
+  <p class="plea">“People of science, hear my plea: is it true that Jupiter quietly takes the killer comets for us? Run both universes side by side, and count.”</p>
+  <p style="margin-top:6px;color:var(--ink-faint);font-size:11px">drag to orbit · scroll or pinch to zoom — one camera, two worlds</p>
+</div>
+
+<aside id="controls" class="panel">
+  <p class="sect">Mission parameters <span style="float:right;color:var(--ink-faint);letter-spacing:0;text-transform:none">(changing re-deals both worlds)</span></p>
+  <div class="ctl"><label>Comets per world <b id="nPerVal"></b></label>
+    <input id="nPer" type="range" min="0" max="1000" value="520">
+    <p class="hint">The CPU engine is honest but tires past ~10,000; the GPU keeps going.</p></div>
+  <div class="ctl"><label>Giant planet mass <b id="mjVal"></b></label>
+    <input id="mj" type="range" min="0" max="1000" value="659">
+    <p class="hint">Set it small — a Neptune barely helps. Crank it — a super-Jupiter clears the sky.</p></div>
+
+  <p class="sect">Comet family</p>
+  <div class="presets" id="popBtns">
+    <button data-p="jfc">Jupiter-family swarm ☄</button>
+    <button data-p="halley">Long-haul visitors</button>
+    <button data-p="belt">Inner rogue belt</button>
+  </div>
+  <p class="hint" id="popHint"></p>
+
+  <p class="sect">Compute engine</p>
+  <div class="seg" id="modeSeg">
+    <button data-m="cpu">CPU · float64</button>
+    <button data-m="gpu">GPU · float32</button>
+  </div>
+  <p class="hint">Same adaptive velocity-Verlet, two arithmetics. Switching hands the live state across — no re-deal.</p>
+  <button id="redeal">Deal a fresh comet swarm 🎲</button>
+</aside>
+</div>
+
+<div id="timebar" class="panel">
+  <button id="playBtn" aria-label="Play or pause">❚❚</button>
+  <label id="speedLabel" for="speed">Speed</label>
+  <input id="speed" type="range" min="0" max="1000" value="551">
+  <span id="speedVal"></span>
+  <span id="clock"></span>
+</div>
+
+<div id="banner" class="panel"></div>
+
+<aside id="readouts" class="panel">
+  <p class="sect">Twin-system ledger</p>
+  <table id="stats">
+    <thead><tr><th>per world</th><th>♃ with</th><th>without</th></tr></thead>
+    <tbody>
+      <tr><td>Comets still in play</td><td id="aAct">—</td><td id="bAct">—</td></tr>
+      <tr><td>…on Earth-crossing orbits</td><td id="aCross">—</td><td id="bCross">—</td></tr>
+      <tr class="hot"><td>Impacts on Earth 💥</td><td id="aHit">—</td><td id="bHit">—</td></tr>
+      <tr><td>Close calls (&lt; 0.05 AU)</td><td id="aClose">—</td><td id="bClose">—</td></tr>
+      <tr><td>Ejected from the system</td><td id="aEj">—</td><td id="bEj">—</td></tr>
+      <tr><td>Swallowed by Jupiter</td><td id="aJup">—</td><td id="bJup">—</td></tr>
+      <tr><td>Fell into the Sun</td><td id="aSun">—</td><td id="bSun">—</td></tr>
+    </tbody>
+  </table>
+  <div id="overall">Gathering statistics…</div>
+
+  <p class="chartCap">Earth-crossing threats remaining</p>
+  <canvas class="chart" id="chartThreats"></canvas>
+  <p class="chartCap">Cumulative impacts on Earth</p>
+  <canvas class="chart" id="chartHits"></canvas>
+  <p class="legend"><span class="swA">━ with Jupiter</span> · <span class="swB">━ without</span></p>
+
+  <p class="sect">Console</p>
+  <div class="row"><span class="k">Frames per second</span><span class="v" id="rFps">—</span></div>
+  <div class="row"><span class="k">Speed, achieved / asked</span><span class="v" id="rSpeed">—</span></div>
+  <div class="row"><span class="k">Keeping up?</span><span class="v"><span id="vSpeed" class="pill dim">—</span></span></div>
+  <div class="row"><span class="k">Compute engine</span><span class="v"><span id="rMode" class="pill dim">—</span></span></div>
+  <div class="row"><span class="k">Integrator check&thinsp;*</span><span class="v" id="rDrift" style="color:var(--ink-faint)">—</span></div>
+  <p class="hint">* median |Δa/a| in the planet-free world, where each comet’s semi-major axis should be exactly conserved. Any drift you see is the integrator’s sin, not physics.</p>
+</aside>
+
+<details id="science" class="panel">
+  <summary>The science: slingshots, shields, and honest caveats</summary>
+  <div class="body">
+    <h3>1 · The twin-system experiment</h3>
+    <p>Both halves of the screen run the <b>same physics on the same comets</b> — identical positions, velocities, and random seed. The only difference: the left system has a giant planet on a circular orbit at 5.2 AU, the right one doesn’t. Each comet feels the Sun and (on the left) Jupiter; the comets are numerous enough to be treated as massless test particles, so this is the classic <b>restricted three-body problem</b>, integrated honestly — no scripted outcomes. Every divergence between the two ledgers is Jupiter’s doing.</p>
+    <h3>2 · How a giant planet clears the yard</h3>
+    <p>A comet that crosses Jupiter’s orbit will, sooner or later, pass close to it. Each close pass is a <b>gravitational slingshot</b> that trades energy between comet and planet. The kicks are random in sign, so the comet’s orbital energy random-walks — and the walk has absorbing ends: enough gained energy and the comet is <b>ejected to interstellar space</b> (watch the pale violet dots leave); enough lost and its orbit decouples from Earth’s. A few unlucky ones hit the planet itself, as Shoemaker–Levy 9 famously did in 1994. Either way, an Earth-crossing comet in the left world has a short life expectancy, while the same comet on the right circulates for eternity, re-rolling its impact dice every perihelion. That is the whole “shield”: not a wall, but a bouncer with a fast eviction policy.</p>
+    <h3>3 · Friend <i>and</i> foe — the honest caveat</h3>
+    <p>The popular claim (“without Jupiter, impacts would be 1,000× more common” — Wetherill 1994) is real science but not the whole story. Horner &amp; Jones (2008–2012) re-ran the question across planet masses and found Jupiter is a <b>Jekyll-and-Hyde neighbour</b>: it ejects comets, yes, but it also nudges asteroids out of the main belt and flings Oort-cloud visitors inward — and an intermediate-mass giant (a Saturn) can be <i>worse than nothing</i>. This simulation shows the population where the shield story is strongest: comets already on Jupiter-crossing, Earth-threatening orbits. Try the “Inner rogue belt” family — Jupiter can’t reach it directly, and the shield largely switches off. If the verdict panel ever tells you Jupiter is losing, that’s not a bug; it’s Hyde.</p>
+    <h3>4 · What we inflated, and why it’s fair</h3>
+    <p>A real Earth is 4×10⁻⁵ AU across — with a few thousand comets you’d wait years of wall-clock time for one honest hit. Here Earth’s capture radius is <b>0.004 AU (~75× its gravitationally-focused radius)</b> and Jupiter’s is 0.01 AU (~2× its focused cross-section); the Sun swallows anything inside 0.02 AU, standing in for the tidal shredding of sungrazers. The inflation is applied <b>identically in both worlds</b>, so the ratio of impact counts — the number this page exists to measure — is meaningful even though the absolute rate is accelerated. Likewise the clock: real Jupiter-family comets take ~10⁵ years to be evicted; at a few hundred simulated years per second you can watch it happen over coffee.</p>
+    <p class="fn"><b>Numerical method:</b> adaptive velocity-Verlet (kick–drift–kick with re-evaluated acceleration), per-comet timestep dt = η·min(r☉^{3/2}, r♃^{3/2}/√m♃) with η = 0.035, further clamped near Earth so encounters are resolved below the capture radius — no tunnelling through the target. Planets ride an exact analytic two-body solution (the Sun visibly orbits the barycenter), so planetary motion carries zero integration error. The CPU engine runs float64; the GPU engine runs the identical scheme in float32 fragment shaders, advancing every comet hundreds of substeps per frame entirely on the GPU — possible because test particles never interact, an O(N) problem instead of the O(N²) of self-gravity. Comets that can’t finish a frame’s time budget carry a private time debt and catch up next frame, so slow hardware degrades speed, never physics.</p>
+    <p class="fn"><b>Initial conditions:</b> perihelia drawn uniformly inside/near Earth’s orbit, aphelia log-uniform per family, Rayleigh-distributed inclinations, all other angles uniform. Units: G = 1, M☉ = 1, 1 length unit = 1 AU (1 M♃ = 9.54×10⁻⁴ M☉); one year = 2π time units. Escape is declared past 60 AU, or beyond 30 AU with positive orbital energy.</p>
+    <p class="fn"><b>What’s not modeled:</b> Earth’s own gravity (its inflated radius stands in for focusing), the other planets, planetary migration, the Yarkovsky effect, and comet fading. Saturn matters in reality — it hands comets down to Jupiter — so treat this as the cleanest possible A/B test of one giant planet, not a full solar-system ephemeris.</p>
+  </div>
+</details>
+
+<script>
+'use strict';
+/* ===================== units & constants (G = 1, AU, M☉) ===================== */
+const TAU=Math.PI*2;
+const AJ=5.2;                 // giant planet semi-major axis, AU
+const MJ_UNIT=9.543e-4;       // one Jupiter mass in solar masses
+const ETA=0.035;              // adaptive timestep aggressiveness (~180 steps/orbit)
+const DTMAX=0.25, DTMIN=2e-5; // timestep clamps, time units (1 yr = 2π)
+const R_HIT=0.004;            // Earth capture radius (inflated ~75x, see science panel)
+const R_CLOSE=0.05;           // "close call" radius
+const R_SUN=0.02, R_JCAP=0.010, R_ESC=60.0;
+const ITER_BUDGET=3.0e8;      // max particle-substeps per GPU pass (TDR safety)
+
+/* ===================== parameters ===================== */
+const mobile=innerWidth<700;
+const params={ nPer:mobile?6000:20000, mjx:1.0, pop:'jfc', speedYr:30, mode:'gpu' };
+const pops={
+  jfc:   {qlo:0.2, qhi:1.3, Qlo:4.5, Qhi:9,   si:8,  hint:'Comets caught on Jupiter-crossing orbits with perihelia in the inner system — the population Jupiter polices hardest.'},
+  halley:{qlo:0.2, qhi:1.3, Qlo:8,   Qhi:35,  si:25, hint:'Halley-type visitors from far out. They still cross Jupiter’s orbit every revolution — eviction is slower but just as final.'},
+  belt:  {qlo:0.6, qhi:1.3, Qlo:2.2, Qhi:4.2, si:5,  hint:'Strays that never reach Jupiter. No close encounters, no eviction — watch the shield largely switch off. (Honesty corner.)'}
+};
+
+/* ===================== state ===================== */
+let N=0, NT=0;                     // comets per world; NT = 2N (world A = [0,N), B = [N,2N))
+let px,py,pz,vx,vy,vz;             // float64 master state (CPU engine + staging)
+let st,ins;                        // status: 0 active, 1 hit Earth, 2 ejected, 3 sun, 4 ate by Jupiter
+let tP,cc,a0;                      // per-particle absolute time, close-call count, initial semi-axis
+let simTime=0, mJ=0, omJ=0, rS=0, rJ=0;
+let blown=false, playing=!matchMedia('(prefers-reduced-motion: reduce)').matches;
+let cpuCursor=0;
+let flash=[0,0], prevHits=[0,0];
+let samples=[];                    // {yr, cA, cB, hA, hB} for the charts
+let cross0=1;
+
+let seed=20260709;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let rng=mulberry32(seed);
+
+/* ===================== initial conditions ===================== */
+function keplerE(M,e){ let E=e>0.8?Math.PI:M;
+  for(let k=0;k<20;k++){const f=E-e*Math.sin(E)-M;E-=f/(1-e*Math.cos(E));}
+  return E;}
+function initSystem(){
+  rng=mulberry32(seed);
+  N=params.nPer; NT=2*N;
+  mJ=MJ_UNIT*params.mjx;
+  omJ=Math.sqrt((1+mJ)/(AJ*AJ*AJ));
+  rS=AJ*mJ/(1+mJ); rJ=AJ-rS;
+  px=new Float64Array(NT);py=new Float64Array(NT);pz=new Float64Array(NT);
+  vx=new Float64Array(NT);vy=new Float64Array(NT);vz=new Float64Array(NT);
+  st=new Uint8Array(NT);ins=new Uint8Array(NT);
+  tP=new Float64Array(NT);cc=new Float32Array(NT);a0=new Float64Array(NT);
+  const P=pops[params.pop], sig=P.si*Math.PI/180;
+  // Sun & Jupiter at t=0 (world A, barycentric): Jupiter at (rJ,0), Sun at (-rS,0)
+  const s0x=-rS, s0y=0, sv0x=0, sv0y=-rS*omJ;
+  for(let i=0;i<N;i++){
+    const q=P.qlo+rng()*(P.qhi-P.qlo);
+    const Q=Math.exp(Math.log(P.Qlo)+rng()*Math.log(P.Qhi/P.Qlo));
+    const a=(q+Q)/2, e=(Q-q)/(Q+q);
+    let inc=sig*Math.sqrt(-2*Math.log(1-rng()*0.999)); if(inc>1.0)inc=1.0;
+    const node=rng()*TAU, w=rng()*TAU, M=rng()*TAU;
+    const E=keplerE(M,e), cE=Math.cos(E), sE=Math.sin(E);
+    const se=Math.sqrt(1-e*e), r=a*(1-e*cE), n=Math.pow(a,-1.5);
+    const xo=a*(cE-e), yo=a*se*sE;
+    const vxo=-n*a*a*sE/r, vyo=n*a*a*se*cE/r;
+    const cO=Math.cos(node),sO=Math.sin(node),ci=Math.cos(inc),si=Math.sin(inc),cw=Math.cos(w),sw=Math.sin(w);
+    const Px=cO*cw-sO*sw*ci, Py=sO*cw+cO*sw*ci, Pz=sw*si;
+    const Qx=-cO*sw-sO*cw*ci, Qy=-sO*sw+cO*cw*ci, Qz=cw*si;
+    const hx=xo*Px+yo*Qx, hy=xo*Py+yo*Qy, hz=xo*Pz+yo*Qz;          // heliocentric
+    const hvx=vxo*Px+vyo*Qx, hvy=vxo*Py+vyo*Qy, hvz=vxo*Pz+vyo*Qz;
+    // world A: barycentric = heliocentric + Sun's wobble; world B: Sun fixed at origin
+    px[i]=hx+s0x; py[i]=hy+s0y; pz[i]=hz;
+    vx[i]=hvx+sv0x; vy[i]=hvy+sv0y; vz[i]=hvz;
+    px[i+N]=hx; py[i+N]=hy; pz[i+N]=hz;
+    vx[i+N]=hvx; vy[i+N]=hvy; vz[i+N]=hvz;
+    a0[i]=a; a0[i+N]=a;
+  }
+  simTime=0; cpuCursor=0; blown=false;
+  flash=[0,0]; prevHits=[0,0]; samples=[]; lastAch=null;
+  cross0=Math.max(1,countCross0());
+  banner.style.display='none';
+  if(params.mode==='gpu'&&gpuOK) transferToGPU();
+  cam.dist=Math.max(16, 2.2*pops[params.pop].Qhi*0.55);
+  updateHitCounters(0,0);
+  drawCharts();
+}
+function countCross0(){ let c=0;
+  for(let i=N;i<NT;i++){ const el=elements(i,0,0,0); if(el&&el.q<1&&el.Q>1)c++; }
+  return c;}
+/* heliocentric osculating elements of particle i, given this world's Sun state */
+function elements(i,sx,sy,svx){ // svx unused precision-wise; sun velocity ~1e-4, negligible for classing
+  const rx=px[i]-sx, ry=py[i]-sy, rz=pz[i];
+  const r=Math.sqrt(rx*rx+ry*ry+rz*rz); if(r<1e-9)return null;
+  const v2=vx[i]*vx[i]+vy[i]*vy[i]+vz[i]*vz[i];
+  const E=0.5*v2-1/r; if(E>=0)return {q:1e9,Q:1e9,a:1e9,unbound:true};
+  const hx=ry*vz[i]-rz*vy[i], hy=rz*vx[i]-rx*vz[i], hz=rx*vy[i]-ry*vx[i];
+  const h2=hx*hx+hy*hy+hz*hz;
+  const a=-0.5/E, e=Math.sqrt(Math.max(0,1+2*E*h2));
+  return {a, q:a*(1-e), Q:a*(1+e), unbound:false};
+}
+
+/* ===================== CPU engine (float64) ===================== */
+function accelCPU(i, x,y,z, t, out){
+  const world=i<N?0:1, m=world===0?mJ:0;
+  let ang=omJ*t, sx=0, sy=0;
+  if(m>0){ sx=-rS*Math.cos(ang); sy=-rS*Math.sin(ang); }
+  const dxs=sx-x, dys=sy-y, dzs=-z;
+  const d2=dxs*dxs+dys*dys+dzs*dzs, dl=Math.sqrt(d2), inv=1/(d2*dl);
+  out[0]=dxs*inv; out[1]=dys*inv; out[2]=dzs*inv;
+  out[3]=dl*Math.sqrt(dl);                       // dt hint
+  out[4]=sx; out[5]=sy;
+  if(m>0){
+    const jx=rJ*Math.cos(ang), jy=rJ*Math.sin(ang);
+    const dxj=jx-x, dyj=jy-y, dzj=-z;
+    const dj2=dxj*dxj+dyj*dyj+dzj*dzj+1e-8, djl=Math.sqrt(dj2), invj=m/(dj2*djl);
+    out[0]+=dxj*invj; out[1]+=dyj*invj; out[2]+=dzj*invj;
+    const hj=djl*Math.sqrt(djl)/Math.sqrt(m);
+    if(hj<out[3])out[3]=hj;
+  }
+}
+const _a1=new Float64Array(6), _a2=new Float64Array(6);
+function advanceParticle(i, target){
+  if(st[i]!==0){tP[i]=target;return;}
+  const world=i<N?0:1, m=world===0?mJ:0;
+  let t=tP[i], x=px[i],y=py[i],z=pz[i], ux=vx[i],uy=vy[i],uz=vz[i];
+  let inside=ins[i], count=cc[i], status=0;
+  for(let it=0; it<30000 && t<target-1e-9; it++){
+    accelCPU(i,x,y,z,t,_a1);
+    let dt=ETA*_a1[3];
+    const angE=t, ex=_a1[4]+Math.cos(angE), ey=_a1[5]+Math.sin(angE);
+    const dex=ex-x, dey=ey-y;
+    const de2=dex*dex+dey*dey+z*z;
+    if(de2<0.36){
+      const del=Math.sqrt(de2);
+      const rvx=ux+Math.sin(angE), rvy=uy-Math.cos(angE);
+      const vrel=Math.sqrt(rvx*rvx+rvy*rvy+uz*uz)+1e-4;
+      const dcl=0.12*Math.max(del,R_HIT)/vrel;
+      if(dcl<dt)dt=dcl;
+    }
+    if(dt>DTMAX)dt=DTMAX; if(dt<DTMIN)dt=DTMIN;
+    if(dt>target-t)dt=target-t;
+    x+=ux*dt+0.5*_a1[0]*dt*dt; y+=uy*dt+0.5*_a1[1]*dt*dt; z+=uz*dt+0.5*_a1[2]*dt*dt;
+    t+=dt;
+    accelCPU(i,x,y,z,t,_a2);
+    ux+=0.5*(_a1[0]+_a2[0])*dt; uy+=0.5*(_a1[1]+_a2[1])*dt; uz+=0.5*(_a1[2]+_a2[2])*dt;
+    // events (planet positions at new t are in _a2[4..5])
+    const sx=_a2[4], sy=_a2[5];
+    const dsx=x-sx, dsy=y-sy;
+    if(dsx*dsx+dsy*dsy+z*z<R_SUN*R_SUN){status=3;break;}
+    if(m>0){
+      const ang=omJ*t, jx=rJ*Math.cos(ang), jy=rJ*Math.sin(ang);
+      const dj2=(x-jx)*(x-jx)+(y-jy)*(y-jy)+z*z;
+      if(dj2<R_JCAP*R_JCAP){status=4;break;}
+    }
+    const ex2=sx+Math.cos(t), ey2=sy+Math.sin(t);
+    const de=Math.sqrt((x-ex2)*(x-ex2)+(y-ey2)*(y-ey2)+z*z);
+    if(de<R_HIT){status=1;break;}
+    if(de<R_CLOSE){ if(!inside){count++;inside=1;} }
+    else if(de>R_CLOSE*1.7) inside=0;
+    const r2=x*x+y*y+z*z;
+    if(r2>R_ESC*R_ESC || (r2>900 && 0.5*(ux*ux+uy*uy+uz*uz)-(1+m)/Math.sqrt(r2)>0)){status=2;break;}
+  }
+  px[i]=x;py[i]=y;pz[i]=z;vx[i]=ux;vy[i]=uy;vz[i]=uz;
+  tP[i]=status?target:t; ins[i]=inside; cc[i]=count;
+  if(status)st[i]=status;
+}
+function cpuAdvance(budgetMs){
+  const t0=performance.now();
+  let i=cpuCursor, checked=0;
+  for(let sweep=0; sweep<NT; sweep++){
+    if(tP[i]<simTime-1e-9){
+      if(simTime-tP[i]>40)tP[i]=simTime-40;    // cap runaway debt on slow machines
+      advanceParticle(i,simTime);
+    }
+    i=(i+1)%NT;
+    if(++checked>=32){checked=0;if(performance.now()-t0>budgetMs)break;}
+  }
+  cpuCursor=i;
+}
+
+/* ===================== WebGL2 boot ===================== */
+const canvas=document.getElementById('gl');
+const gl=canvas.getContext('webgl2',{antialias:true,powerPreference:'high-performance'});
+if(!gl){document.body.insertAdjacentHTML('beforeend',
+  '<div class="panel" style="top:50%;left:50%;transform:translate(-50%,-50%);padding:20px 24px;max-width:44ch">This experiment needs WebGL2, which your browser isn’t offering. The written story still lives in “The science” panel below.</div>');
+  throw new Error('no webgl2');}
+let gpuOK=false, canReadFloat=false;
+function sh(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s)+src);return s;}
+function prog(vs,fs){const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,vs));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));return p;}
+function uni(p){const o={},n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){const u=gl.getActiveUniform(p,i);o[u.name]=gl.getUniformLocation(p,u.name);}return o;}
+
+const PTS_VS=`#version 300 es
+precision highp float; precision highp int;
+in vec4 aPos;
+uniform sampler2D uPosTex,uVelTex;
+uniform int uTexW,uFromTex,uIdx0;
+uniform mat4 uVP; uniform vec3 uCamPos,uSunPos;
+uniform float uPtPx;
+out vec4 vCol;
+const vec3 C_HOT=vec3(1.0,0.545,0.30), C_SAFE=vec3(0.30,0.50,0.70), C_ESC=vec3(0.58,0.52,0.80);
+void main(){
+  vec3 p; float cls;
+  if(uFromTex==1){
+    int idx=gl_VertexID+uIdx0;
+    ivec2 tc=ivec2(idx%uTexW, idx/uTexW);
+    vec4 P=texelFetch(uPosTex,tc,0);
+    p=P.xyz;
+    if(P.w!=0.0){cls=-1.0;}
+    else{
+      vec3 r=p-uSunPos; vec3 v=texelFetch(uVelTex,tc,0).xyz;
+      float rl=max(length(r),1e-6);
+      float E=0.5*dot(v,v)-1.0/rl;
+      if(E>=0.0)cls=2.0;
+      else{
+        vec3 h=cross(r,v);
+        float e=sqrt(max(1.0+2.0*E*dot(h,h),0.0));
+        float a=-0.5/E;
+        cls=(a*(1.0-e)<1.0 && a*(1.0+e)>1.0)?0.0:1.0;
+      }
+    }
+  }else{p=aPos.xyz;cls=aPos.w;}
+  if(cls<-0.5){gl_Position=vec4(2.0,2.0,2.0,1.0);gl_PointSize=0.0;vCol=vec4(0.0);return;}
+  vec3 rp=vec3(p.x,p.z,p.y)-uCamPos;
+  gl_Position=uVP*vec4(rp,1.0);
+  float d=max(length(rp),1e-4);
+  gl_PointSize=clamp(uPtPx/d,1.1,5.0)*(cls==0.0?1.4:1.0);
+  vec3 col=cls==0.0?C_HOT:(cls==1.0?C_SAFE:C_ESC);
+  vCol=vec4(col, cls==2.0?0.4:0.75);
+}`;
+const PTS_FS=`#version 300 es
+precision mediump float;
+in vec4 vCol; out vec4 o;
+void main(){float d=length(gl_PointCoord-0.5);float a=smoothstep(0.5,0.05,d)*vCol.a;o=vec4(vCol.rgb*a,a);}`;
+const MARK_VS=`#version 300 es
+uniform mat4 uVP; uniform vec3 uP,uCamPos; uniform float uPx,uMin,uMax;
+void main(){vec3 rp=vec3(uP.x,uP.z,uP.y)-uCamPos;gl_Position=uVP*vec4(rp,1.0);
+  float d=max(length(rp),1e-4);gl_PointSize=clamp(uPx/d,uMin,uMax);}`;
+const MARK_FS=`#version 300 es
+precision mediump float;
+uniform vec4 uCol; uniform float uPow; out vec4 o;
+void main(){float d=length(gl_PointCoord-0.5);float a=pow(clamp(1.0-2.0*d,0.0,1.0),uPow)*uCol.a;o=vec4(uCol.rgb*a,a);}`;
+const RING_VS=`#version 300 es
+in vec3 aPos; uniform mat4 uVP; uniform vec3 uC; uniform float uR;
+void main(){gl_Position=uVP*vec4(uC+aPos*uR,1.0);}`;
+const RING_FS=`#version 300 es
+precision mediump float;
+uniform vec4 uCol; out vec4 o;
+void main(){o=vec4(uCol.rgb*uCol.a,uCol.a);}`;
+const BACK_VS=`#version 300 es
+in vec4 aS; uniform mat4 uVP; uniform float uDPR; out float vB;
+void main(){vB=fract(aS.w);gl_Position=uVP*vec4(aS.xyz,1.0);gl_PointSize=floor(aS.w)*uDPR;}`;
+const BACK_FS=`#version 300 es
+precision mediump float;
+in float vB; out vec4 o;
+void main(){float d=length(gl_PointCoord-0.5);float a=smoothstep(0.5,0.08,d)*(0.35+0.65*vB);o=vec4(vec3(0.82,0.87,1.0)*a,a);}`;
+const QUAD_VS=`#version 300 es
+void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.0-1.0,0.0,1.0);}`;
+/* the whole physics engine: each fragment advances one comet through many adaptive substeps */
+const STEP_FS=`#version 300 es
+precision highp float; precision highp int;
+uniform sampler2D uPos,uVel,uAux;
+uniform int uTexW,uNPer,uMaxIter;
+uniform float uDT,uMJ,uOmJ,uPhJ,uPhE;
+layout(location=0) out vec4 oPos;
+layout(location=1) out vec4 oVel;
+layout(location=2) out vec4 oAux;
+const float AJ=${AJ.toFixed(1)}, ETA=${ETA}, DTMAX=${DTMAX}, DTMIN=${DTMIN};
+const float RHIT=${R_HIT}, RCLOSE=${R_CLOSE}, RSUN=${R_SUN}, RJCAP=${R_JCAP}, RESC=${R_ESC.toFixed(1)};
+vec3 accel(vec3 p, float tau, float mJ, float rS, float rJ, out float hint, out vec2 sp){
+  float ang=uPhJ+uOmJ*tau;
+  vec2 cj=vec2(cos(ang),sin(ang));
+  sp=-rS*cj;
+  vec3 ds=vec3(sp,0.0)-p;
+  float d2=dot(ds,ds), dl=sqrt(d2);
+  vec3 a=ds/(d2*dl);
+  hint=dl*sqrt(dl);
+  if(mJ>0.0){
+    vec3 dj=vec3(rJ*cj,0.0)-p;
+    float dj2=dot(dj,dj)+1e-8, djl=sqrt(dj2);
+    a+=mJ*dj/(dj2*djl);
+    hint=min(hint, djl*sqrt(djl)*inversesqrt(mJ));
+  }
+  return a;
+}
+void main(){
+  ivec2 tc=ivec2(gl_FragCoord.xy);
+  vec4 P=texelFetch(uPos,tc,0);
+  vec4 V=texelFetch(uVel,tc,0);
+  vec4 A=texelFetch(uAux,tc,0);
+  oPos=P;oVel=V;oAux=A;
+  int idx=tc.y*uTexW+tc.x;
+  if(P.w!=0.0||idx>=2*uNPer)return;
+  float mJ=idx<uNPer?uMJ:0.0;
+  float rS=AJ*mJ/(1.0+mJ), rJ=AJ-rS;
+  vec3 p=P.xyz, v=V.xyz;
+  float tau=-A.x, count=A.y, inside=A.z, status=0.0;
+  float hint; vec2 sp;
+  for(int it=0;it<uMaxIter;it++){
+    if(tau>=uDT-1e-7)break;
+    vec3 a1=accel(p,tau,mJ,rS,rJ,hint,sp);
+    float dt=ETA*hint;
+    float angE=uPhE+tau;
+    vec2 ep=sp+vec2(cos(angE),sin(angE));
+    vec3 de=vec3(ep,0.0)-p;
+    float de2=dot(de,de);
+    if(de2<0.36){
+      vec3 ev=vec3(-sin(angE),cos(angE),0.0);
+      dt=min(dt, 0.12*max(sqrt(de2),RHIT)/(length(v-ev)+1e-4));
+    }
+    dt=clamp(dt,DTMIN,DTMAX);
+    dt=min(dt,uDT-tau);
+    p+=v*dt+0.5*a1*dt*dt;
+    tau+=dt;
+    vec3 a2=accel(p,tau,mJ,rS,rJ,hint,sp);
+    v+=0.5*(a1+a2)*dt;
+    // events at the new state (sp is now the Sun at time tau)
+    vec3 ds=p-vec3(sp,0.0);
+    if(dot(ds,ds)<RSUN*RSUN){status=3.0;break;}
+    if(mJ>0.0){
+      float ang=uPhJ+uOmJ*tau;
+      vec3 dj=p-vec3(rJ*cos(ang),rJ*sin(ang),0.0);
+      if(dot(dj,dj)<RJCAP*RJCAP){status=4.0;break;}
+    }
+    float angE2=uPhE+tau;
+    vec3 dE=p-vec3(sp+vec2(cos(angE2),sin(angE2)),0.0);
+    float del=length(dE);
+    if(del<RHIT){status=1.0;break;}
+    if(del<RCLOSE){ if(inside<0.5){count+=1.0;inside=1.0;} }
+    else if(del>RCLOSE*1.7)inside=0.0;
+    float r2=dot(p,p);
+    if(r2>RESC*RESC||(r2>900.0&&0.5*dot(v,v)-(1.0+mJ)*inversesqrt(r2)>0.0)){status=2.0;break;}
+  }
+  float lag=(status==0.0)?max(uDT-tau,0.0):0.0;
+  oPos=vec4(p,status);
+  oVel=vec4(v,0.0);
+  oAux=vec4(lag,count,inside,0.0);
+}`;
+
+let pPts,uPts,pMark,uMark,pRing,uRing,pBack,uBack,pStep,uStep;
+let backVBO,ptsVBO,ringVBO,NBACK=1400,NRING=180;
+function buildGLObjects(){
+  gpuOK=!!gl.getExtension('EXT_color_buffer_float');
+  pPts=prog(PTS_VS,PTS_FS);uPts=uni(pPts);
+  pMark=prog(MARK_VS,MARK_FS);uMark=uni(pMark);
+  pRing=prog(RING_VS,RING_FS);uRing=uni(pRing);
+  pBack=prog(BACK_VS,BACK_FS);uBack=uni(pBack);
+  if(gpuOK){pStep=prog(QUAD_VS,STEP_FS);uStep=uni(pStep);}
+  const arr=new Float32Array(NBACK*4);
+  {let s=98765;const r=()=>{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff;};
+   for(let i=0;i<NBACK;i++){const u=r()*2-1,ph=r()*TAU,q=Math.sqrt(1-u*u),R=900;
+    arr[i*4]=R*q*Math.cos(ph);arr[i*4+1]=R*u;arr[i*4+2]=R*q*Math.sin(ph);
+    arr[i*4+3]=(1+Math.floor(r()*2.4))+r()*0.99;}}
+  backVBO=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,backVBO);gl.bufferData(gl.ARRAY_BUFFER,arr,gl.STATIC_DRAW);
+  const ring=new Float32Array(NRING*3);
+  for(let i=0;i<NRING;i++){const a=i/NRING*TAU;ring[i*3]=Math.cos(a);ring[i*3+1]=0;ring[i*3+2]=Math.sin(a);}
+  ringVBO=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,ringVBO);gl.bufferData(gl.ARRAY_BUFFER,ring,gl.STATIC_DRAW);
+  ptsVBO=gl.createBuffer();
+  gpu.TW=0;gpu.tex=null;
+}
+
+/* ===================== GPU engine (float32 in textures, MRT) ===================== */
+const gpu={TW:512,TH:0,tex:null,fbo:null,cur:0,pack:null,rbPos:null,rbVel:null,rbAux:null};
+function makeTex(w,h){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,w,h,0,gl.RGBA,gl.FLOAT,null);return t;}
+function ensureGPUTextures(){
+  const TW=512, TH=Math.max(1,Math.ceil(NT/TW));
+  if(gpu.tex&&gpu.TH===TH)return;
+  if(gpu.tex){for(let s=0;s<2;s++){for(const t of gpu.tex[s])gl.deleteTexture(t);gl.deleteFramebuffer(gpu.fbo[s]);}}
+  gpu.TW=TW;gpu.TH=TH;gpu.tex=[[],[]];gpu.fbo=[];
+  for(let s=0;s<2;s++){
+    const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);
+    for(let k=0;k<3;k++){
+      const t=makeTex(TW,TH);gpu.tex[s].push(t);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0+k,gl.TEXTURE_2D,t,0);
+    }
+    gpu.fbo.push(f);
+  }
+  gpu.pack=new Float32Array(TW*TH*4);
+  gpu.rbPos=new Float32Array(TW*TH*4);gpu.rbVel=new Float32Array(TW*TH*4);gpu.rbAux=new Float32Array(TW*TH*4);
+  canReadFloat=(()=>{gl.bindFramebuffer(gl.FRAMEBUFFER,gpu.fbo[0]);gl.readBuffer(gl.COLOR_ATTACHMENT0);
+    const ok=gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_TYPE)===gl.FLOAT&&
+             gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_FORMAT)===gl.RGBA;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);return ok;})();
+}
+function bindTexUnit(unit,tex,loc){gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(loc,unit);}
+function transferToGPU(){
+  ensureGPUTextures();
+  const b=gpu.pack;
+  b.fill(0);
+  for(let i=0;i<NT;i++){b[i*4]=px[i];b[i*4+1]=py[i];b[i*4+2]=pz[i];b[i*4+3]=st[i];}
+  gl.bindTexture(gl.TEXTURE_2D,gpu.tex[gpu.cur][0]);gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,gpu.TW,gpu.TH,gl.RGBA,gl.FLOAT,b);
+  b.fill(0);
+  for(let i=0;i<NT;i++){b[i*4]=vx[i];b[i*4+1]=vy[i];b[i*4+2]=vz[i];}
+  gl.bindTexture(gl.TEXTURE_2D,gpu.tex[gpu.cur][1]);gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,gpu.TW,gpu.TH,gl.RGBA,gl.FLOAT,b);
+  b.fill(0);
+  for(let i=0;i<NT;i++){b[i*4]=Math.max(0,simTime-tP[i]);b[i*4+1]=cc[i];b[i*4+2]=ins[i];}
+  gl.bindTexture(gl.TEXTURE_2D,gpu.tex[gpu.cur][2]);gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,gpu.TW,gpu.TH,gl.RGBA,gl.FLOAT,b);
+}
+function readGPUState(){
+  if(!canReadFloat)return false;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,gpu.fbo[gpu.cur]);
+  gl.readBuffer(gl.COLOR_ATTACHMENT0);gl.readPixels(0,0,gpu.TW,gpu.TH,gl.RGBA,gl.FLOAT,gpu.rbPos);
+  gl.readBuffer(gl.COLOR_ATTACHMENT1);gl.readPixels(0,0,gpu.TW,gpu.TH,gl.RGBA,gl.FLOAT,gpu.rbVel);
+  gl.readBuffer(gl.COLOR_ATTACHMENT2);gl.readPixels(0,0,gpu.TW,gpu.TH,gl.RGBA,gl.FLOAT,gpu.rbAux);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  return true;
+}
+function transferToCPU(){
+  if(!readGPUState()){initSystem();showBanner('This GPU can’t read float textures back — comet swarm re-dealt for CPU mode.');return;}
+  for(let i=0;i<NT;i++){
+    px[i]=gpu.rbPos[i*4];py[i]=gpu.rbPos[i*4+1];pz[i]=gpu.rbPos[i*4+2];st[i]=gpu.rbPos[i*4+3];
+    vx[i]=gpu.rbVel[i*4];vy[i]=gpu.rbVel[i*4+1];vz[i]=gpu.rbVel[i*4+2];
+    tP[i]=simTime-gpu.rbAux[i*4];cc[i]=gpu.rbAux[i*4+1];ins[i]=gpu.rbAux[i*4+2];
+  }
+}
+function gpuStep(dT){
+  const dst=1-gpu.cur;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,gpu.fbo[dst]);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0,gl.COLOR_ATTACHMENT1,gl.COLOR_ATTACHMENT2]);
+  gl.viewport(0,0,gpu.TW,gpu.TH);
+  gl.disable(gl.BLEND);gl.disable(gl.SCISSOR_TEST);
+  gl.useProgram(pStep);
+  bindTexUnit(0,gpu.tex[gpu.cur][0],uStep.uPos);
+  bindTexUnit(1,gpu.tex[gpu.cur][1],uStep.uVel);
+  bindTexUnit(2,gpu.tex[gpu.cur][2],uStep.uAux);
+  gl.uniform1i(uStep.uTexW,gpu.TW);
+  gl.uniform1i(uStep.uNPer,N);
+  gl.uniform1i(uStep.uMaxIter,Math.min(12000,Math.max(256,Math.floor(ITER_BUDGET/NT))));
+  gl.uniform1f(uStep.uDT,dT);
+  gl.uniform1f(uStep.uMJ,mJ);
+  gl.uniform1f(uStep.uOmJ,omJ);
+  gl.uniform1f(uStep.uPhJ,(omJ*simTime)%TAU);
+  gl.uniform1f(uStep.uPhE,simTime%TAU);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gpu.cur=dst;
+}
+
+/* ===================== matrices & camera ===================== */
+function m4mul(a,b){const o=new Array(16);
+ for(let c=0;c<4;c++)for(let r=0;r<4;r++){let s=0;for(let k=0;k<4;k++)s+=a[k*4+r]*b[c*4+k];o[c*4+r]=s;}return o;}
+function persp(fov,asp,n,f){const t=1/Math.tan(fov/2);
+ return [t/asp,0,0,0, 0,t,0,0, 0,0,(f+n)/(n-f),-1, 0,0,2*f*n/(n-f),0];}
+function cross3(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+function norm3(a){const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l];}
+function viewRot(cd){const z=cd;let x=norm3(cross3([0,1,0],z));
+ if(!isFinite(x[0])||Math.hypot(x[0],x[1],x[2])<1e-6)x=[1,0,0];
+ const y=cross3(z,x);
+ return [x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0, 0,0,0,1];}
+const cam={yaw:-0.6,pitch:0.85,dist:22,fov:50};
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+const ptrs=new Map();let pinchD=0;
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);canvas.classList.add('dragging');});
+canvas.addEventListener('pointerup',e=>{ptrs.delete(e.pointerId);canvas.classList.remove('dragging');pinchD=0;});
+canvas.addEventListener('pointercancel',e=>{ptrs.delete(e.pointerId);pinchD=0;});
+canvas.addEventListener('pointermove',e=>{
+  if(!ptrs.has(e.pointerId))return;
+  const prev=ptrs.get(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+  if(ptrs.size===1){
+    cam.yaw-=(e.clientX-prev[0])*0.005;
+    cam.pitch=Math.min(1.5,Math.max(-1.5,cam.pitch+(e.clientY-prev[1])*0.005));
+  }else if(ptrs.size===2){
+    const pts=[...ptrs.values()];const d=Math.hypot(pts[0][0]-pts[1][0],pts[0][1]-pts[1][1]);
+    if(pinchD>0){cam.dist=Math.min(300,Math.max(1.5,cam.dist*pinchD/d));}
+    pinchD=d;
+  }
+});
+canvas.addEventListener('wheel',e=>{e.preventDefault();
+  cam.dist=Math.min(300,Math.max(1.5,cam.dist*Math.exp(e.deltaY*0.0012)));
+},{passive:false});
+
+/* ===================== rendering ===================== */
+const toRender=p=>[p[0],p[2],p[1]];
+let dpr=1;
+function resize(){
+  dpr=Math.min(devicePixelRatio||1,2);
+  canvas.width=Math.round(innerWidth*dpr);canvas.height=Math.round(innerHeight*dpr);
+}
+addEventListener('resize',resize);resize();
+
+const cpuRenderBuf={arr:null};
+function fillCPURenderBuf(){
+  if(!cpuRenderBuf.arr||cpuRenderBuf.arr.length<NT*4)cpuRenderBuf.arr=new Float32Array(NT*4);
+  const a=cpuRenderBuf.arr;
+  const ang=omJ*simTime, sxA=-rS*Math.cos(ang), syA=-rS*Math.sin(ang);
+  for(let i=0;i<NT;i++){
+    a[i*4]=px[i];a[i*4+1]=py[i];a[i*4+2]=pz[i];
+    let cls=-1;
+    if(st[i]===0){
+      const el=elements(i,i<N?sxA:0,i<N?syA:0,0);
+      cls=el.unbound?2:(el.q<1&&el.Q>1?0:1);
+    }
+    a[i*4+3]=cls;
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,ptsVBO);
+  gl.bufferData(gl.ARRAY_BUFFER,a,gl.DYNAMIC_DRAW);
+}
+function planetPositions(){
+  const ang=omJ*simTime, angE=simTime%TAU;
+  const sA=[-rS*Math.cos(ang),-rS*Math.sin(ang),0];
+  const jA=[rJ*Math.cos(ang),rJ*Math.sin(ang),0];
+  const eA=[sA[0]+Math.cos(angE),sA[1]+Math.sin(angE),0];
+  const sB=[0,0,0], eB=[Math.cos(angE),Math.sin(angE),0];
+  return {sA,jA,eA,sB,eB};
+}
+function drawRing(VP,camPos,centerR,R,col){
+  gl.useProgram(pRing);
+  gl.uniformMatrix4fv(uRing.uVP,false,VP);
+  gl.uniform3f(uRing.uC,centerR[0]-camPos[0],centerR[1]-camPos[1],centerR[2]-camPos[2]);
+  gl.uniform1f(uRing.uR,R);
+  gl.uniform4fv(uRing.uCol,col);
+  gl.bindBuffer(gl.ARRAY_BUFFER,ringVBO);
+  const loc=gl.getAttribLocation(pRing,'aPos');
+  gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,3,gl.FLOAT,false,0,0);
+  gl.drawArrays(gl.LINE_LOOP,0,NRING);
+  gl.disableVertexAttribArray(loc);
+}
+function drawMark(VP,camPos,posPhys,px_,mn,mx,col,pw){
+  gl.useProgram(pMark);
+  gl.uniformMatrix4fv(uMark.uVP,false,VP);
+  gl.uniform3fv(uMark.uCamPos,camPos);
+  const r=toRender(posPhys);
+  gl.uniform3f(uMark.uP,posPhys[0],posPhys[1],posPhys[2]);
+  gl.uniform1f(uMark.uPx,px_);gl.uniform1f(uMark.uMin,mn);gl.uniform1f(uMark.uMax,mx);
+  gl.uniform4fv(uMark.uCol,col);gl.uniform1f(uMark.uPow,pw);
+  gl.drawArrays(gl.POINTS,0,1);
+}
+function render(){
+  const W=canvas.width,H=canvas.height,hw=Math.floor(W/2);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.disable(gl.SCISSOR_TEST);
+  gl.viewport(0,0,W,H);
+  gl.clearColor(0.024,0.039,0.075,1);gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  gl.disable(gl.DEPTH_TEST);
+  const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  const dir=[cp*Math.sin(cam.yaw),sp,cp*Math.cos(cam.yaw)];
+  const eye=[dir[0]*cam.dist,dir[1]*cam.dist,dir[2]*cam.dist];
+  const VP=m4mul(persp(cam.fov*Math.PI/180,(hw/H)||1,0.05,3000),viewRot(dir));
+  const VP32=new Float32Array(VP);
+  const pp=planetPositions();
+  const gpuMode=params.mode==='gpu'&&gpuOK;
+  if(!gpuMode)fillCPURenderBuf();
+  gl.enable(gl.SCISSOR_TEST);
+  for(let w=0;w<2;w++){
+    const x0=w===0?0:hw;
+    gl.viewport(x0,0,hw,H);gl.scissor(x0,0,hw,H);
+    // background stars
+    gl.useProgram(pBack);
+    gl.uniformMatrix4fv(uBack.uVP,false,VP32);gl.uniform1f(uBack.uDPR,dpr);
+    gl.bindBuffer(gl.ARRAY_BUFFER,backVBO);
+    {const loc=gl.getAttribLocation(pBack,'aS');
+     gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,4,gl.FLOAT,false,0,0);
+     gl.drawArrays(gl.POINTS,0,NBACK);gl.disableVertexAttribArray(loc);}
+    // orbit rings
+    const sun=w===0?pp.sA:pp.sB;
+    drawRing(VP32,eye,toRender(sun),1.0,[0.36,0.78,0.68,0.30]);
+    if(w===0&&mJ>0)drawRing(VP32,eye,[0,0,0],rJ,[0.9,0.65,0.36,0.28]);
+    // comets
+    gl.useProgram(pPts);
+    gl.uniformMatrix4fv(uPts.uVP,false,VP32);
+    gl.uniform3fv(uPts.uCamPos,eye);
+    gl.uniform1f(uPts.uPtPx,90*dpr);
+    const s=w===0?pp.sA:pp.sB;
+    gl.uniform3f(uPts.uSunPos,s[0],s[1],s[2]);
+    if(gpuMode){
+      gl.uniform1i(uPts.uFromTex,1);
+      gl.uniform1i(uPts.uTexW,gpu.TW);
+      gl.uniform1i(uPts.uIdx0,w*N);
+      bindTexUnit(0,gpu.tex[gpu.cur][0],uPts.uPosTex);
+      bindTexUnit(1,gpu.tex[gpu.cur][1],uPts.uVelTex);
+      gl.drawArrays(gl.POINTS,0,N);
+    }else{
+      gl.uniform1i(uPts.uFromTex,0);
+      gl.bindBuffer(gl.ARRAY_BUFFER,ptsVBO);
+      const loc=gl.getAttribLocation(pPts,'aPos');
+      gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,4,gl.FLOAT,false,0,0);
+      gl.drawArrays(gl.POINTS,w*N,N);
+      gl.disableVertexAttribArray(loc);
+    }
+    // markers: sun, earth (+flash), jupiter
+    drawMark(VP32,eye,sun,900*dpr,10,60,[1.0,0.9,0.62,1.0],2.6);
+    const f=flash[w];
+    drawMark(VP32,eye,w===0?pp.eA:pp.eB,(140+220*f)*dpr,4+8*f,14+16*f,[0.43+0.5*f,0.85,0.75,1.0],1.2);
+    if(w===0&&mJ>0)drawMark(VP32,eye,pp.jA,280*dpr,5,22,[0.9,0.65,0.36,1.0],1.4);
+  }
+  gl.disable(gl.SCISSOR_TEST);
+}
+
+/* ===================== statistics & verdict ===================== */
+const $=id=>document.getElementById(id);
+const banner=$('banner');
+function showBanner(msg){banner.textContent=msg;banner.style.display='block';
+  clearTimeout(showBanner.t);showBanner.t=setTimeout(()=>banner.style.display='none',6000);}
+const fmt=(x,d=2)=>x.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:0});
+const SUP='⁰¹²³⁴⁵⁶⁷⁸⁹';
+function sci(x){
+  if(!isFinite(x))return '—';
+  if(x===0)return '0';
+  if(x>=1e-3&&x<1e4)return x.toPrecision(2);
+  const e=Math.floor(Math.log10(x)),m=x/Math.pow(10,e);
+  const es=(e<0?'⁻':'')+String(Math.abs(e)).split('').map(c=>SUP[+c]).join('');
+  return m.toFixed(1)+'×10'+es;
+}
+let lastSample=0, lastAch=null, driftVal=NaN;
+function sampleStats(now){
+  if(now-lastSample<700)return;
+  lastSample=now;
+  const gpuMode=params.mode==='gpu'&&gpuOK;
+  let getP,getV,getS,getC,getLag;
+  if(gpuMode){
+    if(!readGPUState())return;
+    const P=gpu.rbPos,V=gpu.rbVel,A=gpu.rbAux;
+    getP=i=>[P[i*4],P[i*4+1],P[i*4+2]];getV=i=>[V[i*4],V[i*4+1],V[i*4+2]];
+    getS=i=>P[i*4+3];getC=i=>A[i*4+1];getLag=i=>A[i*4];
+  }else{
+    getP=i=>[px[i],py[i],pz[i]];getV=i=>[vx[i],vy[i],vz[i]];
+    getS=i=>st[i];getC=i=>cc[i];getLag=i=>Math.max(0,simTime-tP[i]);
+  }
+  const ang=omJ*simTime, sxA=-rS*Math.cos(ang), syA=-rS*Math.sin(ang);
+  const W=[{act:0,cross:0,hit:0,ej:0,sun:0,jup:0,close:0,lag:0},
+           {act:0,cross:0,hit:0,ej:0,sun:0,jup:0,close:0,lag:0}];
+  const drifts=[];
+  const stride=Math.max(1,Math.floor(N/6000)); // subsample element math for very large N
+  for(let i=0;i<NT;i++){
+    const w=i<N?0:1, S=Math.round(getS(i)), o=W[w];
+    o.close+=getC(i);
+    if(S===0){
+      o.act++;o.lag+=getLag(i);
+      if((i%stride)===0){
+        const p=getP(i),v=getV(i);
+        const sx=w===0?sxA:0, sy=w===0?syA:0;
+        const rx=p[0]-sx,ry=p[1]-sy,rz=p[2];
+        const r=Math.sqrt(rx*rx+ry*ry+rz*rz);
+        const E=0.5*(v[0]*v[0]+v[1]*v[1]+v[2]*v[2])-1/r;
+        if(E<0){
+          const hx=ry*v[2]-rz*v[1],hy=rz*v[0]-rx*v[2],hz=rx*v[1]-ry*v[0];
+          const e=Math.sqrt(Math.max(0,1+2*E*(hx*hx+hy*hy+hz*hz)));
+          const a=-0.5/E;
+          if(a*(1-e)<1&&a*(1+e)>1)o.cross++;
+          if(w===1&&drifts.length<4000)drifts.push(Math.abs(a/a0[i]-1));
+        }
+      }
+    }
+    else if(S===1)o.hit++;else if(S===2)o.ej++;else if(S===3)o.sun++;else if(S===4)o.jup++;
+  }
+  for(const o of W)o.cross*=stride;
+  if(drifts.length){drifts.sort((a,b)=>a-b);driftVal=drifts[drifts.length>>1];}
+  // achieved speed from mean particle time
+  const meanT=simTime-(W[0].act+W[1].act>0?(W[0].lag+W[1].lag)/(W[0].act+W[1].act):0);
+  let achieved=NaN;
+  if(lastAch&&now>lastAch.wall)achieved=(meanT-lastAch.t)/((now-lastAch.wall)/1000)/TAU;
+  lastAch={wall:now,t:meanT};
+  // impact flash triggers
+  for(let w=0;w<2;w++){if(W[w].hit>prevHits[w])flash[w]=1;prevHits[w]=W[w].hit;}
+  // DOM
+  $('aAct').textContent=fmt(W[0].act,0); $('bAct').textContent=fmt(W[1].act,0);
+  $('aCross').textContent=fmt(W[0].cross,0); $('bCross').textContent=fmt(W[1].cross,0);
+  $('aHit').textContent=fmt(W[0].hit,0); $('bHit').textContent=fmt(W[1].hit,0);
+  $('aClose').textContent=fmt(W[0].close,0); $('bClose').textContent=fmt(W[1].close,0);
+  $('aEj').textContent=fmt(W[0].ej,0); $('bEj').textContent=fmt(W[1].ej,0);
+  $('aJup').textContent=fmt(W[0].jup,0); $('bJup').textContent='—';
+  $('aSun').textContent=fmt(W[0].sun,0); $('bSun').textContent=fmt(W[1].sun,0);
+  updateHitCounters(W[0].hit,W[1].hit);
+  $('rDrift').textContent=isFinite(driftVal)?sci(driftVal):'—';
+  const asked=params.speedYr;
+  $('rSpeed').textContent=(isFinite(achieved)?fmt(Math.max(0,achieved),1):'—')+' / '+fmt(asked,0)+' yr/s';
+  const vs=$('vSpeed');
+  if(isFinite(achieved)){
+    const ratio=achieved/asked;
+    if(!playing){vs.textContent='paused';vs.className='pill dim';}
+    else if(ratio>0.85){vs.textContent='keeping up';vs.className='pill ok';}
+    else if(ratio>0.5){vs.textContent='straining';vs.className='pill warn';}
+    else{vs.textContent='falling behind';vs.className='pill bad';}
+  }
+  // verdict
+  const ov=$('overall'), hA=W[0].hit, hB=W[1].hit;
+  if(hA+hB<8){ov.className='';ov.textContent='Gathering statistics — both Earths are rolling the same dice. Give it a few thousand years (crank the speed).';}
+  else{
+    const ratio=hB/Math.max(hA,0.5);
+    if(hA===0){ov.className='ok';ov.textContent=`A perfect record: ${hB} impacts without Jupiter, zero with. The shield holds.`;}
+    else if(ratio>1.25){ov.className='ok';ov.textContent=`Without Jupiter, Earth has taken ${fmt(ratio,1)}× more hits (${hB} vs ${hA}). The bouncer is earning his keep — ${fmt(W[0].ej+W[0].jup,0)} comets ejected or eaten.`;}
+    else if(ratio>0.8){ov.className='warn';ov.textContent=`Too close to call: ${hA} hits with Jupiter, ${hB} without. The shield is statistical, not a wall — keep counting.`;}
+    else{ov.className='bad';ov.textContent=`Jupiter is losing ${hA} to ${hB} — right now it’s slinging comets inward faster than it ejects them. It does that too (see the science: friend and foe).`;}
+  }
+  // charts
+  const yr=simTime/TAU;
+  samples.push({yr,cA:100*W[0].cross/cross0,cB:100*W[1].cross/cross0,hA,hB});
+  if(samples.length>900)samples=samples.filter((_,k)=>k%2===0);
+  drawCharts();
+}
+function updateHitCounters(a,b){$('hitCntA').textContent=fmt(a,0);$('hitCntB').textContent=fmt(b,0);}
+
+/* ===================== charts ===================== */
+function setupChart(cv){
+  const r=cv.getBoundingClientRect(), d=Math.min(devicePixelRatio||1,2);
+  cv.width=Math.max(50,Math.round(r.width*d));cv.height=Math.round(86*d);
+  return cv.getContext('2d');
+}
+function drawChart(cv,keyA,keyB,ymaxAuto,unit){
+  const ctx=cv.getContext('2d'),W=cv.width,H=cv.height,d=Math.min(devicePixelRatio||1,2);
+  ctx.clearRect(0,0,W,H);
+  if(samples.length<2)return;
+  const xmax=Math.max(samples[samples.length-1].yr,1e-9);
+  let ymax=ymaxAuto;
+  if(ymax===null){ymax=1;for(const s of samples)ymax=Math.max(ymax,s[keyA],s[keyB]);ymax*=1.1;}
+  ctx.font=`${9*d}px ui-monospace,Menlo,monospace`;
+  ctx.fillStyle='rgba(93,106,131,.9)';
+  ctx.fillText(fmt(ymax,0)+unit,3*d,9*d);
+  ctx.fillText(fmt(xmax,0)+' yr',W-ctx.measureText(fmt(xmax,0)+' yr').width-3*d,H-3*d);
+  const X=t=>t/xmax*(W-8*d)+4*d, Y=v=>H-4*d-(v/ymax)*(H-16*d);
+  for(const [key,col] of [[keyB,'rgba(143,167,201,.9)'],[keyA,'rgba(229,165,92,.95)']]){
+    ctx.strokeStyle=col;ctx.lineWidth=1.4*d;ctx.beginPath();
+    for(let k=0;k<samples.length;k++){const s=samples[k];k?ctx.lineTo(X(s.yr),Y(s[key])):ctx.moveTo(X(s.yr),Y(s[key]));}
+    ctx.stroke();
+  }
+}
+function drawCharts(){
+  drawChart($('chartThreats'),'cA','cB',100,'%');
+  drawChart($('chartHits'),'hA','hB',null,'');
+}
+
+/* ===================== UI wiring ===================== */
+const nFromSlider=v=>{const n=Math.exp(Math.log(500)+(v/1000)*Math.log(400));
+  const p=Math.pow(10,Math.max(0,Math.floor(Math.log10(n*500))-1));return Math.round(n*500/p)*p;};
+const sliderFromN=n=>1000*Math.log(n/500)/Math.log(400);
+const mjFromSlider=v=>Math.exp(Math.log(0.03)+(v/1000)*Math.log(6/0.03));
+const sliderFromMj=m=>1000*Math.log(m/0.03)/Math.log(6/0.03);
+const speedFromSlider=v=>Math.exp(Math.log(1)+(v/1000)*Math.log(500));
+const sliderFromSpeed=s=>1000*Math.log(s)/Math.log(500);
+function syncLabels(){
+  $('nPerVal').textContent=fmt(params.nPer,0)+' × 2';
+  const m=params.mjx;
+  $('mjVal').textContent=(m<0.09?m.toFixed(3):m.toFixed(2))+' M♃';
+  $('speedVal').textContent=fmt(params.speedYr,0)+' yr/s';
+  $('popHint').textContent=pops[params.pop].hint;
+  document.querySelectorAll('#popBtns button').forEach(b=>b.classList.toggle('on',b.dataset.p===params.pop));
+}
+function syncSliders(){
+  $('nPer').value=sliderFromN(params.nPer);
+  $('mj').value=sliderFromMj(params.mjx);
+  $('speed').value=sliderFromSpeed(params.speedYr);
+}
+$('nPer').addEventListener('input',e=>{params.nPer=Math.max(500,nFromSlider(+e.target.value));syncLabels();});
+$('nPer').addEventListener('change',initSystem);
+$('mj').addEventListener('input',e=>{params.mjx=mjFromSlider(+e.target.value);syncLabels();});
+$('mj').addEventListener('change',initSystem);
+$('speed').addEventListener('input',e=>{params.speedYr=speedFromSlider(+e.target.value);syncLabels();});
+document.querySelectorAll('#popBtns button').forEach(b=>b.addEventListener('click',()=>{
+  params.pop=b.dataset.p;syncLabels();initSystem();
+}));
+const modeBtns=document.querySelectorAll('#modeSeg button');
+function syncModeSeg(){modeBtns.forEach(x=>x.classList.toggle('on',x.dataset.m===params.mode));
+  const rm=$('rMode');rm.textContent=params.mode==='gpu'?'GPU float32':'CPU float64';rm.className='pill dim';}
+modeBtns.forEach(b=>b.addEventListener('click',()=>{
+  if(b.dataset.m===params.mode)return;
+  if(b.dataset.m==='gpu'&&!gpuOK)return;
+  params.mode=b.dataset.m;syncModeSeg();
+  if(params.mode==='gpu')transferToGPU();else transferToCPU();
+  lastAch=null;
+}));
+$('redeal').addEventListener('click',()=>{seed=(seed*1664525+1013904223)|0;initSystem();});
+const playBtn=$('playBtn');
+function syncPlay(){playBtn.textContent=playing?'❚❚':'▶';}
+playBtn.addEventListener('click',()=>{playing=!playing;syncPlay();lastAch=null;});
+addEventListener('keydown',e=>{if(e.code==='Space'&&e.target===document.body){e.preventDefault();playing=!playing;syncPlay();}});
+
+/* ===================== main loop ===================== */
+let lastT=0,fpsAvg=0;
+function frame(now){
+  requestAnimationFrame(frame);
+  const dtW=Math.min(0.1,(now-lastT)/1000||0.016);lastT=now;
+  fpsAvg=fpsAvg*0.95+(1/Math.max(dtW,1e-3))*0.05;
+  $('rFps').textContent=fmt(fpsAvg,0);
+  for(let w=0;w<2;w++)flash[w]=Math.max(0,flash[w]-dtW*2.2);
+  if(playing&&!blown){
+    const dT=Math.min(60,params.speedYr*TAU*dtW);
+    const gpuMode=params.mode==='gpu'&&gpuOK;
+    if(gpuMode){gpuStep(dT);simTime+=dT;}
+    else{simTime+=dT;cpuAdvance(11);}
+  }
+  $('clock').textContent='year '+fmt(Math.floor(simTime/TAU),0);
+  render();
+  sampleStats(now);
+}
+
+/* ===================== boot ===================== */
+try{buildGLObjects();}catch(err){
+  showBanner('Shader trouble: '+String(err).slice(0,120));
+  throw err;
+}
+if(!gpuOK){params.mode='cpu';params.nPer=Math.min(params.nPer,6000);
+  document.querySelector('#modeSeg button[data-m=gpu]').disabled=true;
+  showBanner('No float-texture support — running the float64 CPU engine only.');}
+setupChart($('chartThreats'));setupChart($('chartHits'));
+addEventListener('resize',()=>{setupChart($('chartThreats'));setupChart($('chartHits'));drawCharts();});
+syncSliders();syncLabels();syncModeSeg();syncPlay();
+initSystem();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
